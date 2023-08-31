@@ -1,0 +1,12 @@
+# directories
+.vscode/
+runs/
+**/__pycache__/
+
+# files
+*.mp4
+*.avi
+*.pt
+*.pth
+*.onnx
+*.engine
