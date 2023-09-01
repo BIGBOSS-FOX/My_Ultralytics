@@ -10,6 +10,8 @@
 import cv2
 import time
 import argparse
+import numpy as np
+from collections import defaultdict
 from ultralytics import YOLO
 
 
@@ -23,7 +25,7 @@ def parse_args():
     # Specify the target fps for playback
     parser.add_argument('--target_fps',
                         type=int,
-                        default=25,
+                        default=5,
                         help="Target FPS for playback.")
     # Specify the starting UNIX timestamp (in milliseconds) or None
     parser.add_argument(
@@ -36,6 +38,14 @@ def parse_args():
         '--video_path',
         default='/home/cdy/Data_HDD/Data/Project_SPC/test_data/test1_p1.mp4',
         help="Path to the video file.")
+    parser.add_argument('--start_idx',
+                        default=None,
+                        type=int,
+                        help="Frame index to start playback.")
+    parser.add_argument('--end_idx',
+                        default=None,
+                        type=int,
+                        help="Frame index to end playback.")
 
     args = parser.parse_args()
     return vars(args)
@@ -48,6 +58,8 @@ def main():
     target_fps = args["target_fps"]
     start_ts = args["start_ts"]
     video_path = args["video_path"]
+    start_idx = args["start_idx"]
+    end_idx = args["end_idx"]
 
     if start_ts is None:
         start_ts = int(round(time.time() * 1000))
@@ -69,7 +81,19 @@ def main():
     video_fps = int(cap.get(cv2.CAP_PROP_FPS))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    # Assert the conditions for start_idx and end_idx
+    if start_idx is None:
+        start_idx = 0
+    if end_idx is None:
+        end_idx = total_frames
+
+    assert 0 <= start_idx < end_idx, "start_idx should be less than end_idx"
+    assert start_idx < end_idx <= total_frames, "end_idx should be greater than start_idx and less than or equal to total_frames"
+
     assert target_fps <= video_fps, "Error: Target FPS must be less than or equal to the video FPS."
+
+    # Set the starting frame index for the video
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
 
     # Calculate frame interval based on target_fps
     frame_interval = video_fps // target_fps
@@ -92,7 +116,10 @@ def main():
     print(f"Total Frames: {total_frames}")
 
     pause = False  # Variable to check if video is paused
-    current_frame_idx = 0  # Counter for the current frame index
+    # current_frame_idx = 0  # Counter for the current frame index
+
+    # Store the track history
+    track_history = defaultdict(lambda: [])
 
     # Loop through the video frames
     while cap.isOpened():
@@ -100,16 +127,47 @@ def main():
         success, frame = cap.read()
 
         if success:
+            current_frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+            # Check if the current frame index is within the specified range
+            if current_frame_idx > end_idx:
+                break
+
             if current_frame_idx % frame_interval == 0:
                 print("-" * 50)
-                print(f"Frame: {current_frame_idx + 1}/{total_frames}")
+                print(f"Frame: {current_frame_idx}/{total_frames}")
                 print(f"Timestamp: {current_ts}ms")
 
-                # Run YOLOv8 inference on the frame
-                results = model(frame, retina_masks=True)
+                # # Run YOLOv8 inference on the frame
+                # results = model(frame, retina_masks=True)
+
+                # Run YOLOv8 tracking on the frame, persisting tracks between frames
+                results = model.track(frame, persist=True)
 
                 # Visualize the results on the frame
                 annotated_frame = results[0].plot()
+
+                # Get the boxes and track IDs
+                boxes = results[0].boxes.xywh.cpu()
+                if results[0].boxes.id is not None:
+                    track_ids = results[0].boxes.id.int().cpu().tolist()
+                else:
+                    track_ids = [0] * len(boxes)
+
+                # Plot the tracks
+                for box, track_id in zip(boxes, track_ids):
+                    x, y, w, h = box
+                    track = track_history[track_id]
+                    track.append((float(x), float(y)))  # x, y center point
+                    if len(track) > 30:  # retain 90 tracks for 90 frames
+                        track.pop(0)
+
+                    # Draw the tracking lines
+                    points = np.hstack(track).astype(np.int32).reshape(
+                        (-1, 1, 2))
+                    cv2.polylines(annotated_frame, [points],
+                                  isClosed=False,
+                                  color=(230, 230, 230),
+                                  thickness=10)
 
                 # Display the annotated frame
                 cv2.imshow("YOLOv8 Inference", annotated_frame)
