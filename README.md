@@ -12,3 +12,8 @@
 - Create `myultralytics`
 - Implement tracking in `playground/cv2_inference.py`
 - Test `playground/cv2_tracking_multi_threading.py`. Comfirm diffent trackers share the same track id pool.
+
+2023/9/3:
+
+- Implement `playground/cv2_tracking_single_threading.py`
+- Test `BaseTracker` in `playground/tracker_exp1.py`
