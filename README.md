@@ -17,3 +17,8 @@
 
 - Implement `playground/cv2_tracking_single_threading.py`
 - Test `BaseTracker` in `playground/tracker_exp1.py`
+
+2023/9/7:
+
+- Change track id pool from global to per tracker in `playground/my_trackers.py`
+- Add option to change number of loops per video playback in `cv2_tracking_single_threading.py`

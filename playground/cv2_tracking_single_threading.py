@@ -1,7 +1,9 @@
 import cv2
 import torch
 from pathlib import Path
-from ultralytics.trackers import BOTSORT
+# from ultralytics.trackers import BOTSORT
+# from ultralytics_trackers import BOTSORT
+from my_trackers import BOTSORT
 from ultralytics.utils import IterableSimpleNamespace
 from ultralytics import YOLO
 
@@ -15,6 +17,7 @@ weight_path = 'yolov8m.pt'
 start_frames = [0, 0]
 end_frames = [-1, -1]
 target_fpss = [5, 5]
+loops = [1, 2]
 
 tracker_cfg = IterableSimpleNamespace(**{
     'tracker_type': 'botsort',
@@ -29,6 +32,8 @@ tracker_cfg = IterableSimpleNamespace(**{
     'with_reid': False
 })
 
+current_loops = [0 for _ in video_filepaths]
+
 caps = [cv2.VideoCapture(vfp) for vfp in video_filepaths]
 cap_fpss = [cap.get(cv2.CAP_PROP_FPS) for cap in caps]
 intervals = [int(cap_fps / target_fps) for cap_fps, target_fps in zip(cap_fpss, target_fpss)]
@@ -39,7 +44,7 @@ for i, cap in enumerate(caps):
     if end_frames[i] <= 0:
         end_frames[i] = cap.get(cv2.CAP_PROP_FRAME_COUNT)
 
-save_filepaths_p = [Path(vfp).parent / f"{Path(vfp).stem}_inference.mp4" for vfp in video_filepaths]
+save_filepaths_p = [Path(vfp).parent / f"{Path(vfp).stem}_inference_loops.mp4" for vfp in video_filepaths]
 writers = [cv2.VideoWriter(str(sfp), cv2.VideoWriter_fourcc(*'mp4v'), target_fpss[i], (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))) for i, (cap, sfp) in enumerate(zip(caps, save_filepaths_p))]
 
 release_cap_count = 0
@@ -72,8 +77,15 @@ while release_cap_count < len(caps):
                     # print(results)
                     writers[i].write(annotated_frame)
             elif frame_pos >= end_frames[i]:
-                cap.release()
-                release_cap_count += 1
+                # cap.release()
+                # release_cap_count += 1
+                # If current loop for this video is less than the specified loops, reset the video
+                if current_loops[i] < loops[i] - 1:  # Subtract 1 because loops start from 0
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frames[i])
+                    current_loops[i] += 1
+                else:
+                    cap.release()
+                    release_cap_count += 1
             else:
                 cap.release()
                 release_cap_count += 1
